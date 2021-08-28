@@ -1,0 +1,87 @@
+---
+title: "Decision Tree cross-validation"
+author: "Bo Li U24425931"
+date: "3/1/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggthemes)
+library(glmnet)
+theme_set(theme_bw())
+library(MASS)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(caret)
+library(e1071)
+library(tree)
+library(ISLR)
+library(party)
+library(tidymodels)
+library(caTools)
+```
+```{r}
+data <- fread("C:/Users/boli0/Downloads/train.csv")
+str(data)
+data$price_range <- as.factor(data$price_range)
+```
+```{r}
+set.seed(810)
+split = sample.split(data$price_range, SplitRatio = 0.7)
+data_train = subset(data, split == TRUE)
+data_test = subset(data, split == FALSE)
+y_test <- data_test[,price_range]
+```
+```{r}
+# grow tree
+fit <- rpart(price_range ~., method = "class", data = data_train)
+```
+```{r}
+printcp(fit)
+```
+```{r}
+plotcp(fit) #visualize cross-validation results
+```
+```{r}
+summary(fit)
+```
+```{r}
+# plot tree
+plot(fit, uniform = TRUE, main = "Classification Tree for price_range")
+text(fit, use.n=TRUE, all=TRUE, cex=.7)
+```
+```{r}
+# orginal tree accuracy
+fit.pred = predict(fit, newdata = data_test, type = "class")
+
+test_accuary <- mean(fit.pred == y_test)
+
+test_accuary
+```
+```{r}
+# prune the tree
+fit_cp = rpart(price_range ~ .,method = "class", data = data_train,control = rpart.control(minsplit = 1) , parms = list(split = "information"), cp = 0.01000000)
+```
+```{r}
+# plot the pruned tree
+plot(fit_cp, uniform=TRUE,
+   main="Pruned Classification Tree for price_range")
+text(fit_cp, use.n=TRUE, all=TRUE, cex=.8)
+post(fit_cp, title = "Pruned Classification Tree for price_range")
+```
+```{r}
+# pruned tree accuracy
+fit_cp.pred = predict(fit_cp, newdata = data_test, type = "class")
+
+test_accuary_cp <- mean(fit_cp.pred == y_test)
+
+test_accuary_cp
+```

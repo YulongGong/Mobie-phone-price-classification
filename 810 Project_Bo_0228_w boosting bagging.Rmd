@@ -1,0 +1,238 @@
+---
+title: "810 Team Project"
+author: "Bo Li U24425931"
+date: "2/24/2021"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggthemes)
+library(glmnet)
+theme_set(theme_bw())
+library(MASS)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(caret)
+library(e1071)
+library(tree)
+library(ISLR)
+library(party)
+library(tidymodels)
+library(caTools)
+```
+```{r}
+data <- fread("C:/Users/boli0/Downloads/train.csv")
+str(data)
+data$price_range <- as.factor(data$price_range)
+```
+```{r}
+set.seed(810)
+split = sample.split(data$price_range, SplitRatio = 0.7)
+data_train = subset(data, split == TRUE)
+data_test = subset(data, split == FALSE)
+y_test <- data_test[,price_range]
+```
+```{r}
+# 1-1. Build single classification decision tree
+
+fit = rpart(price_range ~ .,method = "class", data = data_train,control = rpart.control(minsplit = 1) , parms = list(split = "information"))
+
+prp(fit)
+```
+```{r}
+print(fit)
+```
+```{r}
+summary(fit)
+```
+```{r}
+# 1-2. Single classification tree's confusion matrix and accuracy score
+# Accuracy score is 0.775.
+fit.pred = predict(fit, newdata = data_test, type = "class")
+
+cm <- table(observed = y_test, predicted = fit.pred)
+
+cm
+```
+```{r}
+test_accuary <- mean(fit.pred == y_test)
+
+test_accuary
+```
+```{r}
+# 2-1. Build decision tree while cp = 0.01000000
+# Accuracy score is 0.775.
+fit_cp = rpart(price_range ~ .,method = "class", data = data_train,control = rpart.control(minsplit = 1) , parms = list(split = "information"), cp = 0.01000000)
+
+fit_cp.pred = predict(fit_cp, newdata = data_test, type = "class")
+
+test_accuary_cp <- mean(fit_cp.pred == y_test)
+
+test_accuary_cp
+```
+```{r}
+# 3-1. Bagging and random forest
+set.seed(810)
+
+bag.data <- randomForest(price_range ~., data = data_train, mytry = 20, importance = TRUE, proximity = TRUE)
+
+print(bag.data)
+```
+```{r}
+summary(bag.data)
+```
+```{r}
+plot(bag.data)
+```
+```{r}
+bag.pred = predict(bag.data, newdata = data_test, type = "class")
+
+test_accuary_bag <- mean(bag.pred == y_test)
+
+test_accuary_bag
+```
+```{r}
+# 3-2. Random Forest using sqrt(p)
+set.seed(810)
+
+rFM.data <- randomForest(price_range ~., data = data_train, mytry = sqrt(20), importance = TRUE, proximity = TRUE)
+
+print(rFM.data)
+```
+```{r}
+rFM.pred = predict(rFM.data, newdata = data_test, type = "class")
+
+test_accuary_rFM <- mean(rFM.pred == y_test)
+
+test_accuary_rFM
+```
+```{r}
+# 3-3. Random Forest Feature Importance Chart
+importance(rFM.data)
+```
+```{r}
+# 3-4. Random Forest Feature Importance Barplot
+barplot(rFM.data$importance[,2], main = "Feature Importance Barplot")
+```
+```{r}
+# 3-5. Random Forest Feature Importance ScatterPlot
+varImpPlot(rFM.data, sort = TRUE, n.var = nrow(rFM.data$importance), main = "Feature Importance ScatterPlot")
+```
+```{r}
+# 4-1. Classification trees cross-validation
+fit = rpart(price_range ~ .,method = "class", data = data_train,control = rpart.control(minsplit = 1) , parms = list(split = "information"))
+
+tr.control = trainControl(method = "cv", number = 3)
+cp.grid = expand.grid(.cp = (0:10)*0.01)
+tr = train(price_range ~., data = data_train, method = "rpart", trControl = tr.control, tuneGrid = cp.grid)
+tr
+```
+```{r}
+# 4-2. Plot best tree
+best.tree = tr$finalModel
+prp(best.tree)
+```
+```{r}
+# 4-3. Best tree accuracy score is 
+best.tree.pred = predict(best.tree, newdata = data_test)
+test_accuary_cv <- mean(best.tree.pred == y_test)
+
+test_accuary_cv
+```
+```{r}
+# 5. Classification tree, textbook method
+tree.data = tree(price_range ~., data = data_train)
+
+plot(tree.data)
+```
+```{r}
+tree.pred = predict(tree.data, data_test, type = "class")
+
+table(tree.pred, data_test$price_range)
+```
+```{r}
+set.seed(810)
+
+cv.data = cv.tree(tree.data)
+
+plot(cv.data$size, cv.data$dev, type = "b")
+```
+```{r}
+cv.data
+```
+```{r}
+prune.data = prune.misclass(tree.data, best = 16)
+
+tree.pred = predict(prune.data, data_test, type = "class")
+
+test_accuary_prune <- mean(tree.pred == y_test)
+
+test_accuary_prune
+```
+```{r}
+table(tree.pred, data_test$price_range)
+```
+```{r}
+plot(prune.data);text(prune.data, pretty = 0)
+```
+```{r}
+# 6. Boosting and bagging
+library(adabag)
+```
+```{r}
+data.adaboost <- boosting(price_range ~., data = data_train, mfinal = 10, control = rpart.control(maxdepth = 1))
+data.adaboost
+```
+```{r}
+data.predboosting <- predict.boosting(data.adaboost, newdata = data_test)
+data.predboosting
+```
+```{r}
+data.boostcv <- boosting.cv(price_range ~., v = 10, data = data_train, mfinal = 10, control = rpart.control(maxdepth = 1))
+data.boostcv
+```
+```{r}
+barplot(data.adaboost$imp[order(data.adaboost$imp, decreasing = TRUE)], ylim = c(0, 100), main = "Variables Relative Importance", col = "lightblue")
+```
+```{r}
+data.bagging <- bagging(price_range ~., data = data_train, mfinal = 10, control = rpart.control(maxdepth = 1))
+data.bagging
+```
+```{r}
+data.predbagging <- predict.bagging(data.bagging, newdata = data_test)
+data.predbagging
+```
+```{r}
+data.baggingcv <- bagging.cv(price_range ~., v = 10, data = data_train, mfinal = 10, control = rpart.control(maxdepth = 1))
+data.baggingcv
+```
+```{r}
+data.bagging.margins <- margins(data.bagging, data_train)
+data.bagging.predmargins <- margins(data.predbagging, data_test)
+data.bagging.margins
+data.bagging.predmargins
+```
+```{r}
+margins.test <- data.bagging.predmargins[[1]]
+margins.train <- data.bagging.margins[[1]]
+
+plot(sort(margins.train), (1:length(margins.train)) / length(margins.train), type = "l", xlim = c(-1,1), main = "Margin cumulative distribution graph", xlab = "m", ylab = "% observations", col = "blue3", lwd = 2)
+abline(v = 0, col = "red", lty = 2, lwd = 2)
+lines(sort(margins.test), (1:length(margins.test)) / length(margins.test), type = "l", cex = 0.5, col = "green", lwd = 2)
+legend("topleft", c("test","train"), col = c("green", "blue"), lty = 1, lwd = 2)
+```
+```{r}
+evol.test <- errorevol(data.adaboost, data_test)
+evol.train <- errorevol(data.adaboost, data_train)
+
+plot(evol.test$error, type = "l", ylim = c(0, 1),
+main = "Boosting error versus number of trees", xlab = "Iterations",
+ylab = "Error", col = "red", lwd = 2)
+lines(evol.train$error, cex = .5, col = "blue", lty = 2, lwd = 2)
+legend("topleft", c("test", "train"), col = c("red", "blue"), lty = 1:2, lwd = 2)
+```
